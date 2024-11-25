@@ -5,14 +5,11 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
-// import java.util.ArrayList;
 import java.util.HashMap;
 
 public class MyThread extends Thread {
 
     private Socket s;
-    // private ArrayList<String> list;
-
     private HashMap<String, Socket> connectedUsers;
     private String currentUsername;
 
@@ -23,42 +20,45 @@ public class MyThread extends Thread {
 
     @Override
     public void run() {
-        Boolean closed = true;
-        Boolean connected = false;
+        boolean closed = true;
+        boolean connected = false;
 
         do {
             try {
                 BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
                 DataOutputStream out = new DataOutputStream(s.getOutputStream());
 
-                String stringaRicevuta = in.readLine();
-                System.out.println("Client invia: " + stringaRicevuta);
-
-                // ArrayList<String> users = new ArrayList<>();
-
-                String[] words = stringaRicevuta.split(" ");
-
+                String stringaRicevuta;
+                String[] words;
                 String stringaInviare;
-
                 do {
+                    stringaRicevuta = in.readLine();
+                    System.out.println("Client invia: " + stringaRicevuta);
+                    words = stringaRicevuta.split(" ");
+
                     switch (words[0]) {
 
                         // Connesione
                         case "CONNECT":
-                            if (connectedUsers.containsKey(words[1])) {
-                                stringaInviare = "KO user-not-available";
-                                out.writeBytes(stringaInviare + "\n");
-                            } else {
-                                currentUsername = words[1];
-                                connectedUsers.put(currentUsername, s);
-                                stringaInviare = "JOIN " + currentUsername;
-                                SendGlobal(stringaInviare);
-                                // out.writeBytes(stringaInviare + "\n");
-                                System.out.println("Server invia: " + stringaInviare);
+                            boolean check = false;
+                            do {
+                                if (connectedUsers.containsKey(words[1])) {
+                                    stringaInviare = "KO user-not-available";
+                                    out.writeBytes(stringaInviare + "\n");
+                                } else {
+                                    currentUsername = words[1];
+                                    connectedUsers.put(currentUsername, s);
+                                    stringaInviare = "JOIN " + currentUsername;
+                                    SendGlobal(stringaInviare, null, null);
+                                    out.writeBytes("JOIN" + "\n");
+                                    System.out.println("Server invia: " + stringaInviare);
 
-                                connected = true;
-                                words = null;
-                            }
+                                    check = true;
+                                    connected = true;
+                                    words = null;
+                                }
+                            } while (check = false);
+
                             break;
 
                         // Messaggi che non contengono comandi esistenti (nn serve perche il client gia
@@ -73,6 +73,7 @@ public class MyThread extends Thread {
 
                 do {
                     stringaRicevuta = in.readLine();
+                    stringaInviare = "";
                     words = stringaRicevuta.split(" ");
 
                     switch (words[0]) {
@@ -80,16 +81,18 @@ public class MyThread extends Thread {
                         case "PRIVATE":
 
                             String destination = words[1];
-                            stringaInviare = words[2];
+                            for (int i = 2; i < words.length; i++) {
+                                stringaInviare += words[i] + " ";
+                            }
 
                             if (connectedUsers.containsKey(destination)) {
-                                out.writeBytes("OK" + "\n");
+                                // out.writeBytes("OK" + "\n");
                                 System.out.println("Server invia: OK, e inoltra: " + stringaInviare + "\n");
 
                                 Socket destinationSocket = connectedUsers.get(destination);
                                 DataOutputStream destinationOut = new DataOutputStream(
                                         destinationSocket.getOutputStream());
-                                destinationOut.writeBytes("PRIVATE " + currentUsername + ": " + stringaInviare + "\n");
+                                destinationOut.writeBytes("PRIVATE " + currentUsername + " " + stringaInviare + "\n");
                                 System.out.println("Server invia: " + stringaInviare + "\n");
 
                             } else {
@@ -102,44 +105,43 @@ public class MyThread extends Thread {
 
                         case "GLOBAL":
 
-                            stringaInviare = words[2];
-
-                            SendGlobal(stringaInviare);
+                            for (int i = 1; i < words.length; i++) {
+                                stringaInviare += words[i] + " ";
+                            }
+                            SendGlobal(stringaInviare, words[0], currentUsername);
 
                             break;
 
-                        // case "CHANGE": ---> ***E' DA MODIFICARE PERCHE AL POSTO DELL' ARRAYLIST HO
-                        // MESSO UN HASHMAP***
+                        case "CHANGE":
 
-                        // if (users.contains(words[1])) {
-                        // // server deve mandare KO
-                        // stringaInviare = "KO";
-                        // out.writeBytes(stringaInviare + "\n");
-                        // System.out.println("Server invia:" + stringaInviare);
-                        // } else {
-                        // // server deve mandare JOIN + username
-                        // stringaInviare = "JOIN";
-                        // out.writeBytes(stringaInviare + "\n");
-                        // System.out.println("Server invia:" + stringaInviare);
+                            String newUsername = words[1];
+                            if (connectedUsers.containsKey(newUsername)) {
+                                stringaInviare = "KO";
+                                out.writeBytes(stringaInviare + "\n");
+                            } else {
+                                stringaInviare = "ACCEPT ";
+                                out.writeBytes(stringaInviare + "\n");
+                                connectedUsers.remove(currentUsername); // Rimuove il vecchio username
+                                connectedUsers.put(newUsername, s); // Aggiunge il nuovo username
+                                currentUsername = newUsername; // Aggiorna il nome utente corrente
+                                out.writeBytes(stringaInviare + currentUsername + "\n");
+                                System.out.println("Username aggiornato: " + currentUsername);
+                                connected = true;
+                                words = null;
+                            }
+                            break;
 
-                        // users.set(users.indexOf(words[1]), words[1]); // aggiorna l'username
-                        // nell'array degli
-                        // // users collegati
+                        case "USERS":
+                            stringaInviare = "USERS";
 
-                        // connected = true;
-                        // words = null;
-                        // }
-                        // break;
-
-                        // case "USERS":
-                        // stringaInviare = "USERS";
-
-                        // for (int i = 0; i < users.size(); i++) {
-                        // stringaInviare += " " + users.get(i);
-                        // out.writeBytes(stringaInviare + "\n");
-                        // System.out.println("Server invia:" + stringaInviare);
-                        // }
-                        // break;
+                            for (String user : connectedUsers.keySet()) {
+                                if (!user.equals(currentUsername)) {
+                                    stringaInviare += " " + user;
+                                }
+                            }
+                            out.writeBytes(stringaInviare + "\n");
+                            System.out.println("Server invia:" + stringaInviare);
+                            break;
 
                         // Uscita dalla chat
                         case "ESC":
@@ -147,11 +149,13 @@ public class MyThread extends Thread {
 
                             stringaInviare = "BYE " + currentUsername + "\n";
 
-                            SendGlobal(stringaInviare);
+                            SendGlobal(stringaInviare, null, null);
 
                             s.close();
 
                             connected = false;
+
+                            // return;
 
                             break;
 
@@ -165,20 +169,25 @@ public class MyThread extends Thread {
 
             } catch (Exception e) {
                 System.out.println("Errore, comunicazione fallita");
+                closed = false;
             }
         } while (closed);
+
     }
 
-    public void SendGlobal(String str) throws IOException {
+    public void SendGlobal(String str, String type, String mitt) throws IOException {
         for (Socket clientSocket : connectedUsers.values()) {
-            if (clientSocket != s) { // per evitare di mandare il messaggio globale anche a chi lo
-                                     // ha creato
+            if (clientSocket != s) { // per evitare di mandare il messaggio globale anche a chi lo ha creato
                 DataOutputStream clientOut = new DataOutputStream(clientSocket.getOutputStream());
-                clientOut.writeBytes("GLOBAL " + currentUsername + ": " + str + "\n");
-                System.out.println("Server invia: " + str + "\n");
+
+                if (type == null) {
+                    clientOut.writeBytes(str + "\n");
+                    System.out.println("Server invia: " + str + "\n");
+                } else {
+                    clientOut.writeBytes(type + " " + mitt + " " + str + "\n");
+                }
 
             }
         }
     }
-
 }
